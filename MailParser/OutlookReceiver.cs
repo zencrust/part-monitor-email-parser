@@ -6,7 +6,7 @@ using Microsoft.Office.Interop.Outlook;
 
 namespace MailParser
 {
-    internal class OutlookReceiver : IDisposable
+    internal class OutlookReceiver
     {
         private readonly Application outlookApplication;
         private readonly NameSpace outlookNamespace;

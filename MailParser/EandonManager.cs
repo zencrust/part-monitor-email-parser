@@ -2,7 +2,6 @@
 using System.Linq;
 using System.Collections.Generic;
 using NLog;
-using MQTTnet.Client;
 using System.Threading.Tasks;
 
 namespace MailParser
@@ -21,7 +20,7 @@ namespace MailParser
             this.mqttManager = mqttManager;
             this.logger = logger;
         }
-        internal async Task Initiate(EAndonMessage msg)
+        public async Task Initiate(EAndonMessage msg)
         {
             pendingAdd.Add(msg);
             await msg.SendMqttMessage(mqttManager, logger);
@@ -45,7 +44,7 @@ namespace MailParser
                 .Select(key => activeEandon.Remove(key));
         }
 
-        internal async Task SendActiveMqttMessage()
+        public async Task SendActiveMqttMessage()
         {
             DoPendingAddRemove();
 
@@ -56,7 +55,7 @@ namespace MailParser
             }
         }
 
-        internal void Remove(int sla)
+        public void Remove(int sla)
         {
             pendingRemove.AddRange(activeEandon
                 .Where(p => p.Value.SlaLevel >= sla)
@@ -101,7 +100,7 @@ namespace MailParser
             Console.WriteLine($"{oldMsg.AlertId} : {oldMsg.AcknowledgeBy} has been resolved");
         }
 
-        internal async Task ChangeStatus(EandonStatus status, EAndonMessage msg)
+        public async Task ChangeStatus(EandonStatus status, EAndonMessage msg)
         {
             switch (status)
             {
