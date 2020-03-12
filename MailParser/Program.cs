@@ -162,8 +162,10 @@ namespace MailParser
                                 item.Delete();
                             }
 
+                            bool haltMqtt = false;
                             mailItems.ItemAdd += (item) =>
                             {
+                                haltMqtt = true;
                                 var mailItem = item as MailItem;
                                 Logger.Debug(mailItem.Body);
 
@@ -175,6 +177,12 @@ namespace MailParser
                             {
                                 foreach (var item in activeStations)
                                 {
+                                    //dont run when adding email
+                                    if (haltMqtt)
+                                    {
+                                        break;
+                                    }
+
                                     //Application Name/Station Name/function/name
                                     item.Value.CheckSla();
                                     client.Publish(FormatMqttTopic(item.Value), GetStationSerilized(item.Value));
@@ -213,6 +221,16 @@ namespace MailParser
             // Apply config           
             NLog.LogManager.Configuration = config;
         }
+
+        private static void ClearAllMessages(MqttClient client, Dictionary<string, EAndonMessage> activeStations)
+        {
+            var msg = $"{ Properties.Resources.MqttApplicationName}/{Properties.Resources.ClientId}/clear";
+            client.Subscribe(new string[] { msg }, new byte[] { MqttMsgBase.QOS_LEVEL_EXACTLY_ONCE });
+            client.MqttMsgPublished += (sender, e) =>
+            {
+            };
+        }
+
 
         private static void ParseEmail(MqttClient client, Dictionary<string, EAndonMessage> activeStations, string body)
         {
