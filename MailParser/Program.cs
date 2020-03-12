@@ -1,13 +1,16 @@
 ﻿using System;
 using System.Diagnostics;
 using Microsoft.Office.Interop.Outlook;
-using uPLibrary.Networking.M2Mqtt;
 using System.Linq;
 using System.Collections.Generic;
 using System.Text;
 using Newtonsoft.Json;
 using NLog;
-using uPLibrary.Networking.M2Mqtt.Messages;
+using MQTTnet.Client;
+using MQTTnet;
+using MQTTnet.Client.Options;
+using MQTTnet.Client.Subscribing;
+using System.Threading.Tasks;
 
 namespace MailParser
 {
@@ -87,6 +90,12 @@ namespace MailParser
                 }
             }
         }
+
+        internal byte[] ToBytes()
+        {
+            var str = JsonConvert.SerializeObject(this);
+            return Encoding.ASCII.GetBytes(str);
+        }
     }
 
     internal static class Extensions
@@ -110,32 +119,12 @@ namespace MailParser
         }
     }
 
-    internal class DisposableMqttClient : MqttClient, IDisposable
-    {
-        public DisposableMqttClient(string brokerHostName, int brokerPort)
-            : base(brokerHostName, brokerPort, false, MqttSslProtocols.None, null, null)
-        {
-
-        }
-        public DisposableMqttClient(string ipaddress)
-            : base(ipaddress)
-        { }
-
-        public void Dispose()
-        {
-            if (this.IsConnected)
-            {
-                this.Disconnect();
-            }
-        }
-    }
-
     class Program
     {
-        static void Main(string[] args)
+        static async void Main(string[] args)
         {
             InitializeLogging();
-            var Logger = NLog.LogManager.GetCurrentClassLogger();
+            var logger = NLog.LogManager.GetCurrentClassLogger();
 
             while (true)
             {
@@ -143,16 +132,47 @@ namespace MailParser
                 {
                     string brokerAddress = Properties.Resources.ServerAddress;
                     string clientId = Properties.Resources.ClientId;
+                    
                     Application outlookApplication = new Application();
                     NameSpace outlookNamespace = outlookApplication.GetNamespace("MAPI");
                     MAPIFolder inboxFolder = outlookNamespace.GetDefaultFolder(OlDefaultFolders.olFolderInbox);
-                    using (var client = new DisposableMqttClient(brokerAddress, 1883))
+
+                    // Create a new MQTT client.
+                    var factory = new MqttFactory();
+                    var client = factory.CreateMqttClient();
+
+                    var will_topic = $"{ Properties.Resources.MqttApplicationName}/will_message/{Properties.Resources.ClientId}";
+
+                    var willMsgko = new MqttApplicationMessageBuilder()
+                        .WithTopic(will_topic)
+                        .WithRetainFlag(true)
+                        .WithExactlyOnceQoS()
+                        .WithPayload("0")
+                        .Build();
+
+                    var willMsgok = new MqttApplicationMessageBuilder()
+                                .WithRetainFlag(false)
+                                .WithTopic(will_topic)
+                                .WithPayload("1")
+                                .Build();
+
+
+                    // Create TCP based options using the builder.
+                    var options = new MqttClientOptionsBuilder()
+                        .WithClientId(Properties.Resources.ClientId)
+                        .WithTcpServer(brokerAddress, 1883)
+                        .WithWillMessage(willMsgko)
+                        .WithCleanSession()
+                        .WithSessionExpiryInterval(60)
+                        .Build();
+
+                    var res = await client.ConnectAsync(options);
+                    logger.Info(res);
+                    using (client)
                     {
-                        var will_topic = $"{ Properties.Resources.MqttApplicationName}/will_message/{Properties.Resources.ClientId}";
-                        client.Connect(clientId, "", "", true, MqttMsgBase.QOS_LEVEL_EXACTLY_ONCE, true, will_topic, "0", true, 60);
                         Items mailItems = inboxFolder.Items;
                         var activeStations = new Dictionary<string, EAndonMessage>();
-                        Logger.Info("email monitoring program started.");
+                        logger.Info("email monitoring program started.");
                         try
                         {
                             foreach (MailItem item in mailItems)
@@ -167,7 +187,7 @@ namespace MailParser
                             {
                                 haltMqtt = true;
                                 var mailItem = item as MailItem;
-                                Logger.Debug(mailItem.Body);
+                                logger.Debug(mailItem.Body);
 
                                 ParseEmail(client, activeStations, mailItem.Body);
                                 mailItem.Delete();
@@ -185,23 +205,32 @@ namespace MailParser
 
                                     //Application Name/Station Name/function/name
                                     item.Value.CheckSla();
-                                    client.Publish(FormatMqttTopic(item.Value), GetStationSerilized(item.Value));
+                                    var mqttMsg = new MqttApplicationMessageBuilder()
+                                                .WithExactlyOnceQoS()
+                                                .WithRetainFlag(false)
+                                                .WithTopic(FormatMqttTopic(item.Value))
+                                                .WithPayload(item.Value.ToBytes())
+                                                .Build();
+                                    var pubRes = await client.PublishAsync(mqttMsg);
+                                    logger.Info(pubRes);
                                 }
 
-                                client.Publish(will_topic, Encoding.ASCII.GetBytes("1"));
+                                var okWillMsgRes = await client.PublishAsync(willMsgok);
+                                logger.Info(okWillMsgRes);
+
                                 System.Threading.Thread.Sleep(1000);
                             }
                         }
                         catch (System.Exception ex)
                         {
-                            Logger.Error("parsing error");
-                            Logger.Error(ex);
+                            logger.Error("parsing error");
+                            logger.Error(ex);
                         }
                     }
                 }
                 catch (System.Exception ex)
                 {
-                    Logger.Fatal(ex);
+                    logger.Fatal(ex);
                 }
             }
         }
@@ -222,22 +251,47 @@ namespace MailParser
             NLog.LogManager.Configuration = config;
         }
 
-        private static void ClearAllMessages(MqttClient client, Dictionary<string, EAndonMessage> activeStations)
+        private async static Task ClearAllMessages(IMqttClient client, Dictionary<string, EAndonMessage> activeStations, ILogger logger)
         {
-            var msg = $"{ Properties.Resources.MqttApplicationName}/{Properties.Resources.ClientId}/clear";
-            client.Subscribe(new string[] { msg }, new byte[] { MqttMsgBase.QOS_LEVEL_EXACTLY_ONCE });
-            client.MqttMsgPublished += (sender, e) =>
-            {
-            };
+            var topic = $"{ Properties.Resources.MqttApplicationName}/{Properties.Resources.ClientId}/clearSla";
+
+            var topicFilter = new TopicFilterBuilder()
+                .WithTopic(topic)
+                .Build();
+
+            var topicSub = new MqttClientSubscribeOptionsBuilder()
+                .WithTopicFilter(topicFilter)
+                .Build();
+
+            var res = await client.SubscribeAsync(topicSub);
+            client.UseApplicationMessageReceivedHandler(e =>
+           {
+               if(e.ApplicationMessage.Topic == topic)
+               {
+                   try
+                   {
+                       var sla = int.Parse(System.Text.Encoding.Default.GetString(e.ApplicationMessage.Payload));
+
+                       activeStations
+                       .Where(p => p.Value.SlaLevel >= sla)
+                       .Select(x => x.Key)
+                       .Select(key => activeStations.Remove(key));
+                    }
+                   catch (Exception ex)
+                   {
+                       logger.Error(ex);
+                   }
+               }
+           });
         }
 
 
-        private static void ParseEmail(MqttClient client, Dictionary<string, EAndonMessage> activeStations, string body)
+        private async static Task ParseEmail(IMqttClient client, Dictionary<string, EAndonMessage> activeStations, string body, ILogger logger)
         {
             var bodyLines = body.Trim().Split(new string[] { "\r\n" }, StringSplitOptions.RemoveEmptyEntries).ToList();
             if (!client.IsConnected)
             {
-                client.Connect(Properties.Resources.ClientId);
+                await client.ReconnectAsync();
             }
             try
             {
@@ -266,8 +320,15 @@ namespace MailParser
                 if (status.Contains("Initiated"))
                 {
                     activeStations[alertId] = stationMsg;
-                    var msg = GetStationSerilized(stationMsg);
-                    var res = client.Publish(FormatMqttTopic(stationMsg), msg, 2, false);
+                    var msg = stationMsg.ToBytes();
+                    var mqttMsg = new MqttApplicationMessageBuilder()
+                        .WithExactlyOnceQoS()
+                        .WithRetainFlag(false)
+                        .WithTopic(FormatMqttTopic(stationMsg))
+                        .WithPayload(msg)
+                        .Build();
+                    var res = await client.PublishAsync(mqttMsg);
+                    logger.Info(res);
                     Console.WriteLine($"{location} : {userName} has raised eAndOn");
                 }
                 else if (status.Contains("Acknowledged"))
@@ -278,8 +339,15 @@ namespace MailParser
                     station.Acknowledge(userName, timeStamp, slaLevel);
                     activeStations[alertId] = station;
 
-                    var msg = GetStationSerilized(station);
-                    client.Publish(FormatMqttTopic(stationMsg), msg, 2, false);
+                    var msg = station.ToBytes();
+                    var mqttMsg = new MqttApplicationMessageBuilder()
+                                    .WithExactlyOnceQoS()
+                                    .WithRetainFlag(false)
+                                    .WithTopic(FormatMqttTopic(station))
+                                    .WithPayload(msg)
+                                    .Build();
+                    var res = await client.PublishAsync(mqttMsg);
+                    logger.Info(res);
                     Console.WriteLine($"{location} : {userName} has raised been acknowledged");
                 }
                 else if (status.Contains("Resolved"))
@@ -291,8 +359,15 @@ namespace MailParser
                     }
 
                     station.Resolve(userName, timeStamp, slaLevel);
-                    var msg = GetStationSerilized(station);
-                    client.Publish(FormatMqttTopic(station), msg, 2, false);
+                    var msg = station.ToBytes();
+                    var mqttMsg = new MqttApplicationMessageBuilder()
+                                    .WithExactlyOnceQoS()
+                                    .WithRetainFlag(false)
+                                    .WithTopic(FormatMqttTopic(station))
+                                    .WithPayload(msg)
+                                    .Build();
+                    var res = await client.PublishAsync(mqttMsg);
+                    logger.Info(res);
                     Console.WriteLine($"{location} : {userName} eAndOn has been closed");
 
                 }
@@ -300,14 +375,11 @@ namespace MailParser
             catch (System.Exception ex)
             {
                 Console.WriteLine(ex);
+                logger.Info(ex);
             }
         }
 
-        private static byte[] GetStationSerilized(EAndonMessage message)
-        {
-            var str = JsonConvert.SerializeObject(message);
-            return Encoding.ASCII.GetBytes(str);
-        }
+
 
         private static string FormatMqttTopic(EAndonMessage station)
         {
