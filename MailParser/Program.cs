@@ -69,7 +69,7 @@ namespace MailParser
 
         public void ChangeSla(int sla)
         {
-            if(this.SlaLevel < sla)
+            if (this.SlaLevel < sla)
             {
                 this.SlaLevel = sla;
             }
@@ -77,7 +77,7 @@ namespace MailParser
 
         internal void CheckSla()
         {
-            if(this.InitiateTime != "")
+            if (this.InitiateTime != "")
             {
                 var initiatedTime = DateTime.Parse(this.InitiateTime);
                 var calcSla = Math.Min(((int)(DateTime.Now - initiatedTime).TotalMinutes) / 30, 2);
@@ -251,23 +251,32 @@ namespace MailParser
                     var msg = GetStationSerilized(stationMsg);
                     var res = client.Publish(FormatMqttTopic(stationMsg), msg, 2, false);
                     Console.WriteLine($"{location} : {userName} has raised eAndOn");
-
                 }
-                else
+                else if (status.Contains("Acknowledged"))
                 {
                     EAndonMessage station = stationMsg;
                     activeStations.TryGetValue(alertId, out station);
-                    if(status.Contains("Resolved")){
-                        station.Resolve(userName, timeStamp, slaLevel);
-                    }
-                    else if (status.Contains("Acknowledged"))
+
+                    station.Acknowledge(userName, timeStamp, slaLevel);
+                    activeStations[alertId] = station;
+
+                    var msg = GetStationSerilized(station);
+                    client.Publish(FormatMqttTopic(stationMsg), msg, 2, false);
+                    Console.WriteLine($"{location} : {userName} has raised been acknowledged");
+                }
+                else if (status.Contains("Resolved"))
+                {
+                    EAndonMessage station = stationMsg;
+                    if (activeStations.TryGetValue(alertId, out station))
                     {
-                        station.Acknowledge(userName, timeStamp, slaLevel);
+                        activeStations.Remove(alertId);
                     }
 
-                    var msg = GetStationSerilized(activeStations[alertId]);
-                    client.Publish(FormatMqttTopic(station), msg);
+                    station.Resolve(userName, timeStamp, slaLevel);
+                    var msg = GetStationSerilized(station);
+                    client.Publish(FormatMqttTopic(station), msg, 2, false);
                     Console.WriteLine($"{location} : {userName} eAndOn has been closed");
+
                 }
             }
             catch (System.Exception ex)
