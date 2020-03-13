@@ -51,7 +51,7 @@ namespace MailParser
 
 
                 var (status, msg) = ParseEmailBody(mailItem.Body);
-                action(status, msg).Start();
+                action(status, msg).GetAwaiter().GetResult();
                 mailItem.Delete();
             };
         }

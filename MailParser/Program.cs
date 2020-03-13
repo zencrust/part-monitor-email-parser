@@ -16,6 +16,7 @@ namespace MailParser
                 using (var mqttManager = new MqttManager(logger))
                 {
                     var eandonManager = new EandonManager(mqttManager, logger);
+                    await mqttManager.Connect();
                     try
                     {
                         async Task ChangeStatus(EandonStatus status, EAndonMessage msg)
@@ -32,11 +33,18 @@ namespace MailParser
                         var timer = new Timer(1000);
                         async void SendPeriodic(Object source, ElapsedEventArgs e)
                         {
-                            await mqttManager.ReconnectIfNeeded();
-                            await eandonManager.SendActiveMqttMessage();
-                            await mqttManager.SendOK();
-                            //mailReceiver.Process();
-                            timer.Start();
+                            try
+                            {
+                                await mqttManager.ReconnectIfNeeded();
+                                await eandonManager.SendMessage();
+                                await mqttManager.SendOK();
+                                //mailReceiver.Process();
+                                timer.Start();
+                            }
+                            catch(Exception ex)
+                            {
+                                logger.Error(ex);
+                            }
                         }
 
                         timer.AutoReset = false;

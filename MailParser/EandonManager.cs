@@ -9,9 +9,6 @@ namespace MailParser
     internal class EandonManager
     {
         private Dictionary<string, EAndonMessage> activeEandon = new Dictionary<string, EAndonMessage>();
-        List<EAndonMessage> pendingAdd = new List<EAndonMessage>();
-        List<EAndonMessage> pendingRemove = new List<EAndonMessage>();
-
         private readonly MqttManager mqttManager;
         private readonly ILogger logger;
 
@@ -22,61 +19,46 @@ namespace MailParser
         }
         public async Task Initiate(EAndonMessage msg)
         {
-            pendingAdd.Add(msg);
+            activeEandon[msg.AlertId] = msg;
             await msg.SendMqttMessage(mqttManager, logger);
         }
 
-        private void DoPendingAddRemove()
+        private void RemoveInactive()
         {
-            foreach (var item in pendingAdd)
-            {
-                activeEandon[item.AlertId] = item;
-            }
-
-            foreach (var item in pendingRemove)
-            {
-                activeEandon.Remove(item.AlertId);
-            }
-
             activeEandon
                 .Where(p => p.Value.IsActive == false)
                 .Select(x => x.Key)
                 .Select(key => activeEandon.Remove(key));
         }
 
-        public async Task SendActiveMqttMessage()
+        public async Task SendMessage()
         {
-            DoPendingAddRemove();
-
-            foreach (var item in activeEandon)
+            RemoveInactive();
+            var activeVals = activeEandon.Select(x => x.Value).ToList();
+            foreach (var item in activeVals)
             {
-                item.Value.CheckSla();
-                await item.Value.SendMqttMessage(mqttManager, logger);
+                item.CheckSla();
+                await item.SendMqttMessage(mqttManager, logger);
             }
         }
 
         public void Remove(int sla)
         {
-            pendingRemove.AddRange(activeEandon
+            activeEandon
                 .Where(p => p.Value.SlaLevel >= sla)
-                .Select(x => x.Value));
+                .Select(x => x.Key)
+                .Select(key => activeEandon.Remove(key));
         }
 
         public async Task Acknowledge(EAndonMessage eAndon)
         {
             EAndonMessage oldMsg;
-            var available = activeEandon.TryGetValue(eAndon.AlertId, out oldMsg);
+            if(!activeEandon.TryGetValue(eAndon.AlertId, out oldMsg))
+            {
+                oldMsg = eAndon;
+            }
             oldMsg.Acknowledge(eAndon.InitiatedBy, eAndon.InitiateTime, eAndon.SlaLevel);
-
-            if (available)
-            {
-                activeEandon[eAndon.AlertId] = oldMsg;
-            }
-            else
-            {
-                this.pendingAdd.Add(oldMsg);
-            }
-
+            activeEandon[eAndon.AlertId] = oldMsg;
             await oldMsg.SendMqttMessage(mqttManager, logger);
             Console.WriteLine($"{oldMsg.AlertId} : {oldMsg.AcknowledgeBy} has raised been acknowledged");
         }
@@ -84,17 +66,13 @@ namespace MailParser
         public async Task Resolve(EAndonMessage eAndon)
         {
             EAndonMessage oldMsg;
-            var available = activeEandon.TryGetValue(eAndon.AlertId, out oldMsg);
-            oldMsg.Resolve(eAndon.InitiatedBy, eAndon.InitiateTime, eAndon.SlaLevel);
+            if (!activeEandon.TryGetValue(eAndon.AlertId, out oldMsg))
+            {
+                oldMsg = eAndon;
+            }
 
-            if (available)
-            {
-                activeEandon[eAndon.AlertId] = oldMsg;
-            }
-            else
-            {
-                this.pendingAdd.Add(oldMsg);
-            }
+            oldMsg.Resolve(eAndon.InitiatedBy, eAndon.InitiateTime, eAndon.SlaLevel);
+            activeEandon[eAndon.AlertId] = oldMsg;
 
             await oldMsg.SendMqttMessage(mqttManager, logger);
             Console.WriteLine($"{oldMsg.AlertId} : {oldMsg.AcknowledgeBy} has been resolved");
