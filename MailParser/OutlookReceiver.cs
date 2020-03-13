@@ -46,13 +46,19 @@ namespace MailParser
         {
             mailItems.ItemAdd += (item) =>
             {
-                var mailItem = item as MailItem;
-                logger.Debug(mailItem.Body);
+                try
+                {
+                    var mailItem = item as MailItem;
+                    logger.Debug(mailItem.Body);
 
-
-                var (status, msg) = ParseEmailBody(mailItem.Body);
-                action(status, msg).GetAwaiter().GetResult();
-                mailItem.Delete();
+                    var (status, msg) = ParseEmailBody(mailItem.Body);
+                    action(status, msg).GetAwaiter().GetResult();
+                    mailItem.Delete();
+                }
+                catch(System.Exception ex)
+                {
+                    logger.Error(ex);
+                }
             };
         }
 

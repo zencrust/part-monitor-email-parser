@@ -21,16 +21,18 @@ namespace MailParser
                     {
                         async Task ChangeStatus(EandonStatus status, EAndonMessage msg)
                         {
+                            await mqttManager.ReconnectIfNeeded();
                             await eandonManager.ChangeStatus(status, msg);
                         }
 
                         await mailReceiver.ParseInbox(ChangeStatus);
                         mailReceiver.RegisterForEmail(ChangeStatus);
 
-                        await RegisterRemoveSla(mqttManager, eandonManager);
+
+                        await RegisterRemoveSla(mqttManager, eandonManager, logger);
 
                         logger.Info("email monitoring program started.");
-                        var timer = new Timer(1000);
+                        var timer = new Timer(2000);
                         async void SendPeriodic(Object source, ElapsedEventArgs e)
                         {
                             try
@@ -38,7 +40,6 @@ namespace MailParser
                                 await mqttManager.ReconnectIfNeeded();
                                 await eandonManager.SendMessage();
                                 await mqttManager.SendOK();
-                                //mailReceiver.Process();
                                 timer.Start();
                             }
                             catch(Exception ex)
@@ -100,13 +101,25 @@ namespace MailParser
             return NLog.LogManager.GetCurrentClassLogger();
         }
 
-        private async static Task RegisterRemoveSla(MqttManager mqttManager, EandonManager eandonManager)
+        private async static Task RegisterRemoveSla(MqttManager mqttManager, EandonManager eandonManager, ILogger logger)
         {
-            await mqttManager.Subscribe("clearSla", (topic, payload) =>
+            
+            async Task remove(string topic, byte[] payload)
             {
-                var sla = int.Parse(System.Text.Encoding.Default.GetString(payload));
-                eandonManager.Remove(sla);
-            });
+                try
+                {
+                    var sla = int.Parse(System.Text.Encoding.Default.GetString(payload));
+                    logger.Info($"removing all SLAs for {sla}");
+                    await mqttManager.ReconnectIfNeeded();
+                    await eandonManager.Remove(sla);
+                }
+                catch (Exception ex)
+                {
+                    logger.Error(ex);
+                }               
+            }
+
+            await mqttManager.Subscribe("clearSla", remove);
         }
     }
 }

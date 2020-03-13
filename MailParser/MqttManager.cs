@@ -5,6 +5,8 @@ using MQTTnet.Client.Options;
 using System.Threading.Tasks;
 using MQTTnet.Client.Subscribing;
 using System;
+using MQTTnet.Client.Publishing;
+using MQTTnet.Client.Connecting;
 
 namespace MailParser
 {
@@ -46,7 +48,7 @@ namespace MailParser
                 .WithTcpServer(brokerAddress, 1883)
                 .WithWillMessage(willMsgko)
                 .WithCleanSession()
-                .WithSessionExpiryInterval(60)
+                .WithKeepAlivePeriod(TimeSpan.FromSeconds(10))
                 .Build();
 
             this.logger = logger;
@@ -55,7 +57,10 @@ namespace MailParser
         internal async Task Connect()
         {
             var res = await client.ConnectAsync(options);
-            logger.Info(res);
+            if (res.ResultCode != MqttClientConnectResultCode.Success)
+            {
+                logger.Warn(res.ResultCode.ToString() + " " + res.ReasonString);
+            }
         }
 
         internal async Task ReconnectIfNeeded()
@@ -74,17 +79,20 @@ namespace MailParser
                             .WithTopic(topic)
                             .WithPayload(message)
                             .Build();
-                                var pubRes = await client.PublishAsync(mqttMsg);
-            logger.Info(pubRes);
-
+            var res = await client.PublishAsync(mqttMsg);
+            if(res.ReasonCode != MqttClientPublishReasonCode.Success)
+            {
+                logger.Warn(res.ReasonCode.ToString() + " " + res.ReasonString);
+            }
         }
 
-        internal async Task Subscribe(string endTopic, Action<string, byte[]> action)
+        internal async Task Subscribe(string endTopic, Func<string, byte[], Task> action)
         {
             var topic = $"{ Properties.Resources.MqttApplicationName}/{Properties.Resources.ClientId}/{endTopic}";
 
             var topicFilter = new TopicFilterBuilder()
                 .WithTopic(topic)
+                .WithExactlyOnceQoS()
                 .Build();
 
             var topicSub = new MqttClientSubscribeOptionsBuilder()
@@ -110,8 +118,12 @@ namespace MailParser
 
         internal async Task SendOK()
         {
-            var okWillMsgRes = await client.PublishAsync(willMsgok);
-            logger.Info(okWillMsgRes);
+            var res = await client.PublishAsync(willMsgok);
+            if(res.ReasonCode != MqttClientPublishReasonCode.Success)
+            {
+                logger.Warn(res.ReasonCode.ToString() + " " + res.ReasonString);
+
+            }
         }
 
         public void Dispose()

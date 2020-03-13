@@ -88,8 +88,14 @@ namespace MailParser
             return Encoding.ASCII.GetBytes(str);
         }
 
-        internal async Task SendMqttMessage(MqttManager mqttManager, ILogger logger)
+        internal async Task SendMqttMessage(MqttManager mqttManager)
         {
+            await mqttManager.SendMessage(this.GetMqttTopic(), this.ToBytes());
+        }
+
+        internal async Task ForceRemove(MqttManager mqttManager)
+        {
+            this.IsActive = false;
             await mqttManager.SendMessage(this.GetMqttTopic(), this.ToBytes());
         }
 
