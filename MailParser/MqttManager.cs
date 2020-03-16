@@ -19,13 +19,13 @@ namespace MailParser
 
         public MqttManager(ILogger logger)
         {
-            string brokerAddress = Properties.Resources.ServerAddress;
-            string clientId = Properties.Resources.ClientId;
+            string brokerAddress = Properties.Settings.Default.ServerAddress;
+            string clientId = Properties.Settings.Default.ClientId;
 
             var factory = new MqttFactory();
             client = factory.CreateMqttClient();
 
-            var will_topic = $"{ Properties.Resources.MqttApplicationName}/will_message/{Properties.Resources.ClientId}";
+            var will_topic = $"{ Properties.Settings.Default.MqttApplicationName}/will_message/{Properties.Settings.Default.ClientId}";
 
             var willMsgko = new MqttApplicationMessageBuilder()
                 .WithTopic(will_topic)
@@ -65,9 +65,21 @@ namespace MailParser
 
         internal async Task ReconnectIfNeeded()
         {
-            if (!client.IsConnected)
+            try
             {
-                await client.ReconnectAsync();
+                if (!client.IsConnected)
+                {
+                    await client.ReconnectAsync();
+                }
+            }
+            catch (MQTTnet.Exceptions.MqttCommunicationException ex)
+            {
+                logger.Error(ex);
+                //var appLocation = System.Reflection.Assembly.GetExecutingAssembly().Location;
+                //System.Diagnostics.Process.Start(appLocation);
+
+                // Closes the current process
+                Environment.Exit(ex.HResult);
             }
         }
 
@@ -88,8 +100,7 @@ namespace MailParser
 
         internal async Task Subscribe(string endTopic, Func<string, byte[], Task> action)
         {
-            var topic = $"{ Properties.Resources.MqttApplicationName}/{Properties.Resources.ClientId}/{endTopic}";
-
+            var topic = $"{ Properties.Settings.Default.MqttApplicationName}/{Properties.Settings.Default.ClientId}/{endTopic}";
             var topicFilter = new TopicFilterBuilder()
                 .WithTopic(topic)
                 .WithExactlyOnceQoS()

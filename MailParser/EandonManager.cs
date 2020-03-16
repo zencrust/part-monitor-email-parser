@@ -3,6 +3,10 @@ using System.Linq;
 using System.Collections.Generic;
 using NLog;
 using System.Threading.Tasks;
+using System.Runtime.Serialization.Formatters.Binary;
+using System.IO;
+using Newtonsoft.Json;
+using System.Text;
 
 namespace MailParser
 {
@@ -12,12 +16,64 @@ namespace MailParser
 
         private readonly MqttManager mqttManager;
         private readonly ILogger logger;
+        private bool dirty = false;
 
         public EandonManager(MqttManager mqttManager, ILogger logger)
         {
             this.mqttManager = mqttManager;
             this.logger = logger;
         }
+
+        public Task Load()
+        {
+            return Task.Run(() =>
+            {
+                try
+                {
+                    if (File.Exists(Properties.Settings.Default.CurrentEands))
+                    {
+                        using (var stream = File.OpenText(Properties.Settings.Default.CurrentEands))
+                        {
+                            JsonSerializer serializer = new JsonSerializer();
+                            if (serializer.Deserialize(stream, typeof(EAndonMessage[])) is EAndonMessage[] data)
+                            {
+                                foreach (var item in data)
+                                {
+                                    lock (this.activeEandon)
+                                    {
+                                        this.activeEandon[item.AlertId] = item;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                catch(Exception ex)
+                {
+                    logger.Error(ex);
+                }
+            });
+        }
+
+        public Task Save()
+        {
+            return Task.Run(() =>
+            {
+                if (this.dirty)
+                {
+                    File.Delete(Properties.Settings.Default.CurrentEands);
+                    using (var stream = File.CreateText(Properties.Settings.Default.CurrentEands))
+                    {
+                        JsonSerializer serializer = new JsonSerializer();
+                        serializer.Serialize(stream, this.activeEandon.Values.ToArray());
+                    }
+                }
+
+                this.dirty = false;
+            });
+
+        }
+
         public async Task Initiate(EAndonMessage msg)
         {
             lock (activeEandon)
@@ -31,10 +87,16 @@ namespace MailParser
         {
             lock (activeEandon)
             {
-                activeEandon
+                var anyModified = activeEandon
                     .Where(p => p.Value.IsActive == false)
                     .Select(x => x.Key)
-                    .Select(key => activeEandon.Remove(key));
+                    .Select(key => activeEandon.Remove(key))
+                    .Any();
+
+                if(anyModified)
+                {
+                    this.dirty = true;
+                }
             }
 
         }
@@ -73,7 +135,12 @@ namespace MailParser
             {
                 await keyValuePair.Value.ForceRemove(mqttManager);
             }
-            
+
+            if (eAndonMessages.Any())
+            {
+                this.dirty = true;
+            }
+
         }
 
         public async Task Acknowledge(EAndonMessage eAndon)
@@ -116,12 +183,15 @@ namespace MailParser
             {
                 case EandonStatus.Initiated:
                     await this.Initiate(msg);
+                    this.dirty = true;
                     break;
                 case EandonStatus.Acknowledge:
                     await this.Acknowledge(msg);
+                    this.dirty = true;
                     break;
                 case EandonStatus.Resolved:
                     await this.Resolve(msg);
+                    this.dirty = true;
                     break;
             }
         }

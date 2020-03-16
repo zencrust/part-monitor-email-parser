@@ -101,7 +101,7 @@ namespace MailParser
 
         private string GetMqttTopic()
         {
-            return $"{Properties.Resources.MqttApplicationName}/eAndon/{this.Location}/{this.Alert}";
+            return $"{Properties.Settings.Default.MqttApplicationName}/eAndon/{this.Location}/{this.Alert}";
         }
     }
 }

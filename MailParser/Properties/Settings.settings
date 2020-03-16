@@ -1,0 +1,18 @@
+﻿<?xml version='1.0' encoding='utf-8'?>
+<SettingsFile xmlns="http://schemas.microsoft.com/VisualStudio/2004/01/settings" CurrentProfile="(Default)" GeneratedClassNamespace="MailParser.Properties" GeneratedClassName="Settings">
+  <Profiles />
+  <Settings>
+    <Setting Name="ClientId" Type="System.String" Scope="Application">
+      <Value Profile="(Default)">emailParser1</Value>
+    </Setting>
+    <Setting Name="MqttApplicationName" Type="System.String" Scope="Application">
+      <Value Profile="(Default)">partalarm2</Value>
+    </Setting>
+    <Setting Name="ServerAddress" Type="System.String" Scope="Application">
+      <Value Profile="(Default)">3.36.16.125</Value>
+    </Setting>
+    <Setting Name="CurrentEands" Type="System.String" Scope="Application">
+      <Value Profile="(Default)">eanon.bin</Value>
+    </Setting>
+  </Settings>
+</SettingsFile>

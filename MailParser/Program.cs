@@ -16,6 +16,7 @@ namespace MailParser
                 using (var mqttManager = new MqttManager(logger))
                 {
                     var eandonManager = new EandonManager(mqttManager, logger);
+                    await eandonManager.Load();
                     await mqttManager.Connect();
                     try
                     {
@@ -25,14 +26,16 @@ namespace MailParser
                             await eandonManager.ChangeStatus(status, msg);
                         }
 
-                        await mailReceiver.ParseInbox(ChangeStatus);
+                        //await mailReceiver.ParseInbox(ChangeStatus);
                         mailReceiver.RegisterForEmail(ChangeStatus);
 
 
                         await RegisterRemoveSla(mqttManager, eandonManager, logger);
 
                         logger.Info("email monitoring program started.");
+
                         var timer = new Timer(2000);
+
                         async void SendPeriodic(Object source, ElapsedEventArgs e)
                         {
                             try
@@ -40,9 +43,10 @@ namespace MailParser
                                 await mqttManager.ReconnectIfNeeded();
                                 await eandonManager.SendMessage();
                                 await mqttManager.SendOK();
+                                await eandonManager.Save();
                                 timer.Start();
                             }
-                            catch(Exception ex)
+                            catch (Exception ex)
                             {
                                 logger.Error(ex);
                             }
