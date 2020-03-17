@@ -1,10 +1,10 @@
-﻿using System;
-using System.Linq;
-using System.Collections.Generic;
+﻿using Newtonsoft.Json;
 using NLog;
-using System.Threading.Tasks;
+using System;
+using System.Collections.Generic;
 using System.IO;
-using Newtonsoft.Json;
+using System.Linq;
+using System.Threading.Tasks;
 
 namespace MailParser
 {
@@ -28,16 +28,16 @@ namespace MailParser
             {
                 try
                 {
-                    if (File.Exists(Properties.Settings.Default.CurrentEands))
+                    if(File.Exists(Properties.Settings.Default.CurrentEands))
                     {
-                        using (var stream = File.OpenText(Properties.Settings.Default.CurrentEands))
+                        using(var stream = File.OpenText(Properties.Settings.Default.CurrentEands))
                         {
                             JsonSerializer serializer = new JsonSerializer();
-                            if (serializer.Deserialize(stream, typeof(EAndonMessage[])) is EAndonMessage[] data)
+                            if(serializer.Deserialize(stream, typeof(EAndonMessage[])) is EAndonMessage[] data)
                             {
-                                foreach (var item in data)
+                                foreach(var item in data)
                                 {
-                                    lock (this.activeEandon)
+                                    lock(this.activeEandon)
                                     {
                                         this.activeEandon[item.AlertId] = item;
                                     }
@@ -57,12 +57,12 @@ namespace MailParser
         {
             return Task.Run(() =>
             {
-                if (this.dirty)
+                if(this.dirty)
                 {
                     File.Delete(Properties.Settings.Default.CurrentEands);
-                    using (var stream = File.CreateText(Properties.Settings.Default.CurrentEands))
+                    using(var stream = File.CreateText(Properties.Settings.Default.CurrentEands))
                     {
-                        JsonSerializer serializer = new JsonSerializer();
+                        var serializer = new JsonSerializer();
                         serializer.Serialize(stream, this.activeEandon.Values.ToArray());
                     }
                 }
@@ -74,7 +74,7 @@ namespace MailParser
 
         public async Task Initiate(EAndonMessage msg)
         {
-            lock (activeEandon)
+            lock(activeEandon)
             {
                 activeEandon[msg.AlertId] = msg;
             }
@@ -83,7 +83,7 @@ namespace MailParser
 
         private void RemoveInactive()
         {
-            lock (activeEandon)
+            lock(activeEandon)
             {
                 var anyModified = activeEandon
                     .Where(p => p.Value.IsActive == false)
@@ -103,12 +103,12 @@ namespace MailParser
         {
             RemoveInactive();
             List<EAndonMessage> activeVals;
-            lock (activeEandon)
+            lock(activeEandon)
             {
                 activeVals = activeEandon.Select(x => x.Value).ToList();
             }
 
-            foreach (var item in activeVals)
+            foreach(var item in activeVals)
             {
                 item.CheckSla();
                 await item.SendMqttMessage(mqttManager).ConfigureAwait(false);
@@ -118,23 +118,23 @@ namespace MailParser
         public async Task Remove(int sla)
         {
             List<KeyValuePair<string, EAndonMessage>> eAndonMessages;
-            lock (activeEandon)
+            lock(activeEandon)
             {
                 eAndonMessages = activeEandon
                     .Where(p => p.Value.SlaLevel >= sla)
                     .Select(x => x).ToList();
-                foreach (var item in eAndonMessages)
+                foreach(var item in eAndonMessages)
                 {
                     activeEandon.Remove(item.Key);
                 }
             }
 
-            foreach (var keyValuePair in eAndonMessages)
+            foreach(var keyValuePair in eAndonMessages)
             {
                 await keyValuePair.Value.ForceRemove(mqttManager).ConfigureAwait(false);
             }
 
-            if (eAndonMessages.Any())
+            if(eAndonMessages.Any())
             {
                 this.dirty = true;
             }
@@ -144,9 +144,9 @@ namespace MailParser
         public async Task Acknowledge(EAndonMessage eAndon)
         {
             EAndonMessage oldMsg;
-            lock (activeEandon)
+            lock(activeEandon)
             {
-                if (!activeEandon.TryGetValue(eAndon.AlertId, out oldMsg))
+                if(!activeEandon.TryGetValue(eAndon.AlertId, out oldMsg))
                 {
                     oldMsg = eAndon;
                 }
@@ -160,9 +160,9 @@ namespace MailParser
         public async Task Resolve(EAndonMessage eAndon)
         {
             EAndonMessage oldMsg;
-            lock (activeEandon)
-            {               
-                if (!activeEandon.TryGetValue(eAndon.AlertId, out oldMsg))
+            lock(activeEandon)
+            {
+                if(!activeEandon.TryGetValue(eAndon.AlertId, out oldMsg))
                 {
                     oldMsg = eAndon;
                 }
@@ -177,7 +177,7 @@ namespace MailParser
 
         public async Task ChangeStatus(EandonStatus status, EAndonMessage msg)
         {
-            switch (status)
+            switch(status)
             {
                 case EandonStatus.Initiated:
                     await this.Initiate(msg).ConfigureAwait(false);

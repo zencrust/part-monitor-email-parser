@@ -1,9 +1,8 @@
-﻿using System;
-using System.Text;
-using Newtonsoft.Json;
-using NLog;
-using System.Threading.Tasks;
+﻿using Newtonsoft.Json;
+using System;
 using System.Globalization;
+using System.Text;
+using System.Threading.Tasks;
 
 namespace MailParser
 {
@@ -64,7 +63,7 @@ namespace MailParser
 
         public void ChangeSla(int sla)
         {
-            if (this.SlaLevel < sla)
+            if(this.SlaLevel < sla)
             {
                 this.SlaLevel = sla;
             }
@@ -72,14 +71,14 @@ namespace MailParser
 
         internal void CheckSla()
         {
-            if (string.IsNullOrEmpty(this.InitiateTime))
+            if(string.IsNullOrEmpty(this.InitiateTime))
             {
                 return;
             }
 
             var initiatedTime = DateTime.Parse(this.InitiateTime, CultureInfo.InvariantCulture);
             var calcSla = Math.Min(((int)(DateTime.Now - initiatedTime).TotalMinutes) / 30, 2);
-            if (calcSla > this.SlaLevel)
+            if(calcSla > this.SlaLevel)
             {
                 this.SlaLevel = calcSla;
             }

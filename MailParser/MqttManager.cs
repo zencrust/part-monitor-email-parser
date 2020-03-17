@@ -1,13 +1,13 @@
-﻿using NLog;
+﻿using MQTTnet;
 using MQTTnet.Client;
-using MQTTnet;
-using MQTTnet.Client.Options;
-using System.Threading.Tasks;
-using MQTTnet.Client.Subscribing;
-using System;
-using MQTTnet.Client.Publishing;
 using MQTTnet.Client.Connecting;
+using MQTTnet.Client.Options;
+using MQTTnet.Client.Publishing;
+using MQTTnet.Client.Subscribing;
+using NLog;
+using System;
 using System.Threading;
+using System.Threading.Tasks;
 
 namespace MailParser
 {
@@ -59,7 +59,7 @@ namespace MailParser
         internal async Task Connect()
         {
             var res = await this.client.ConnectAsync(options).ConfigureAwait(false);
-            if (res.ResultCode != MqttClientConnectResultCode.Success)
+            if(res.ResultCode != MqttClientConnectResultCode.Success)
             {
                 logger.Warn(res.ResultCode.ToString() + " " + res.ReasonString);
             }
@@ -69,14 +69,14 @@ namespace MailParser
         {
             await reconnectSync.WaitAsync().ConfigureAwait(false);
 
-            while (!client.IsConnected)
+            while(!client.IsConnected)
             {
                 try
                 {
                     logger.Warn("mqtt disconnected! trying to reconnect");
                     await client.ReconnectAsync().ConfigureAwait(false);
                 }
-                catch (MQTTnet.Exceptions.MqttCommunicationException ex)
+                catch(MQTTnet.Exceptions.MqttCommunicationException ex)
                 {
                     logger.Error(ex);
                     await Task.Delay(2000).ConfigureAwait(false);
@@ -115,13 +115,13 @@ namespace MailParser
             var res = await this.client.SubscribeAsync(topicSub).ConfigureAwait(false);
             client.UseApplicationMessageReceivedHandler(e =>
             {
-                if (e.ApplicationMessage.Topic == topic)
+                if(e.ApplicationMessage.Topic == topic)
                 {
                     try
                     {
                         action(topic, e.ApplicationMessage.Payload);
                     }
-                    catch (Exception ex)
+                    catch(Exception ex)
                     {
                         logger.Error(ex);
                     }

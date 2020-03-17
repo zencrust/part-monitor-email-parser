@@ -12,13 +12,13 @@ namespace MailParser
         static async Task Main()
         {
             var (logger, disposable) = InitializeLogger();
-            using (disposable)
+            using(disposable)
             {
                 try
                 {
                     var mailReceiver = new OutlookReceiver(logger);
                     var taskScheduler = TaskScheduler.FromCurrentSynchronizationContext();
-                    using (var mqttManager = new MqttManager(logger))
+                    using(var mqttManager = new MqttManager(logger))
                     {
                         var eandonManager = new EandonManager(mqttManager, logger);
                         await eandonManager.Load().ConfigureAwait(false);
@@ -38,7 +38,7 @@ namespace MailParser
 
                             logger.Info("email monitoring program started.");
 
-                            using (var timer = new Timer(2000))
+                            using(var timer = new Timer(2000))
                             {
                                 async void SendPeriodic(Object source, ElapsedEventArgs e)
                                 {
@@ -49,14 +49,14 @@ namespace MailParser
                                         await mqttManager.SendOK().ConfigureAwait(false);
                                         await eandonManager.Save().ConfigureAwait(false);
                                     }
-                                    catch (Exception ex)
+                                    catch(Exception ex)
                                     {
                                         logger.Error(ex);
                                     }
-		                            finally
-		                            {
-		                                timer.Start();
-		                            }
+                                    finally
+                                    {
+                                        timer.Start();
+                                    }
                                 }
 
                                 timer.AutoReset = false;
@@ -64,24 +64,24 @@ namespace MailParser
                                 timer.Start();
                             }
                             ConsoleKey key = ConsoleKey.Clear;
-                            while (true)
+                            while(true)
                             {
                                 key = System.Console.ReadKey().Key;
-                                if (key == ConsoleKey.Q)
+                                if(key == ConsoleKey.Q)
                                 {
                                     logger.Info("Exiting Application upon user request");
                                     break;
                                 }
                             }
                         }
-                        catch (System.Exception ex)
+                        catch(System.Exception ex)
                         {
                             logger.Error("parsing error");
                             logger.Error(ex);
                         }
                     }
                 }
-                catch (System.Exception ex)
+                catch(System.Exception ex)
                 {
                     logger.Fatal(ex);
 
@@ -121,7 +121,7 @@ namespace MailParser
 
         private async static Task RegisterRemoveSla(MqttManager mqttManager, EandonManager eandonManager, ILogger logger)
         {
-            
+
             async Task remove(string topic, byte[] payload)
             {
                 try
@@ -131,10 +131,10 @@ namespace MailParser
                     await mqttManager.ReconnectIfNeeded().ConfigureAwait(false);
                     await eandonManager.Remove(sla).ConfigureAwait(false);
                 }
-                catch (Exception ex)
+                catch(Exception ex)
                 {
                     logger.Error(ex);
-                }               
+                }
             }
 
             await mqttManager.Subscribe("clearSla", remove).ConfigureAwait(false);

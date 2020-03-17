@@ -1,9 +1,9 @@
-﻿using System;
-using System.Linq;
+﻿using Microsoft.Office.Interop.Outlook;
 using NLog;
-using System.Threading.Tasks;
-using Microsoft.Office.Interop.Outlook;
+using System;
 using System.Globalization;
+using System.Linq;
+using System.Threading.Tasks;
 
 namespace MailParser
 {
@@ -28,7 +28,7 @@ namespace MailParser
         {
             try
             {
-                foreach (MailItem item in mailItems)
+                foreach(MailItem item in mailItems)
                 {
                     logger.Debug(item.Body);
                     var (status, msg) = ParseEmailBody(item.Body);
@@ -37,7 +37,7 @@ namespace MailParser
                     item.Delete();
                 }
             }
-            catch (System.Exception e)
+            catch(System.Exception e)
             {
                 logger.Error(e);
             }
@@ -94,15 +94,15 @@ namespace MailParser
                 slaLevel: slaLevel);
 
             EandonStatus enumStatus = EandonStatus.Unknown;
-            if (status.Contains("Initiated"))
+            if(status.Contains("Initiated"))
             {
                 enumStatus = EandonStatus.Initiated;
             }
-            else if (status.Contains("Acknowledged"))
+            else if(status.Contains("Acknowledged"))
             {
                 enumStatus = EandonStatus.Acknowledge;
             }
-            else if (status.Contains("Resolved"))
+            else if(status.Contains("Resolved"))
             {
                 enumStatus = EandonStatus.Resolved;
             }

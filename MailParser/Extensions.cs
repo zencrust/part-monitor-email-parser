@@ -1,5 +1,5 @@
-﻿using System.Linq;
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
+using System.Linq;
 
 namespace MailParser
 {
@@ -15,7 +15,7 @@ namespace MailParser
         public static string GetTimeStamp(this string timeStamp)
         {
             var timestampIndex = timeStamp.IndexOf("AM", System.StringComparison.InvariantCulture);
-            if (timestampIndex == -1)
+            if(timestampIndex == -1)
             {
                 timestampIndex = timeStamp.IndexOf("PM", System.StringComparison.InvariantCulture);
             }
