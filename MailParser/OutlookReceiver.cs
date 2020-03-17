@@ -3,6 +3,7 @@ using System.Linq;
 using NLog;
 using System.Threading.Tasks;
 using Microsoft.Office.Interop.Outlook;
+using System.Globalization;
 
 namespace MailParser
 {
@@ -31,7 +32,7 @@ namespace MailParser
                 {
                     logger.Debug(item.Body);
                     var (status, msg) = ParseEmailBody(item.Body);
-                    await action(status, msg);
+                    await action(status, msg).ConfigureAwait(true);
 
                     item.Delete();
                 }
@@ -75,7 +76,7 @@ namespace MailParser
             var alertType = bodyLines.GetValue("Alert Type:");
             var location = bodyLines.GetValue("Location:");
             var status = bodyLines.GetValue("Status:");
-            var slaLevel = int.Parse(bodyLines.GetValue("SLA Level:"));
+            var slaLevel = int.Parse(bodyLines.GetValue("SLA Level:"), CultureInfo.InvariantCulture);
 
             var latestHistory = bodyLines[bodyLines.Count - 3]
                 .Split(new string[] { " / " }, StringSplitOptions.RemoveEmptyEntries);

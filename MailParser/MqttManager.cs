@@ -7,6 +7,7 @@ using MQTTnet.Client.Subscribing;
 using System;
 using MQTTnet.Client.Publishing;
 using MQTTnet.Client.Connecting;
+using System.Threading;
 
 namespace MailParser
 {
@@ -16,6 +17,7 @@ namespace MailParser
         private readonly IMqttClientOptions options;
         private readonly MqttApplicationMessage willMsgok;
         private readonly IMqttClient client;
+        private readonly SemaphoreSlim reconnectSync = new SemaphoreSlim(1);
 
         public MqttManager(ILogger logger)
         {
@@ -56,7 +58,7 @@ namespace MailParser
 
         internal async Task Connect()
         {
-            var res = await client.ConnectAsync(options);
+            var res = await this.client.ConnectAsync(options).ConfigureAwait(false);
             if (res.ResultCode != MqttClientConnectResultCode.Success)
             {
                 logger.Warn(res.ResultCode.ToString() + " " + res.ReasonString);
@@ -65,22 +67,22 @@ namespace MailParser
 
         internal async Task ReconnectIfNeeded()
         {
-            try
+            await reconnectSync.WaitAsync().ConfigureAwait(false);
+
+            while (!client.IsConnected)
             {
-                if (!client.IsConnected)
+                try
                 {
-                    await client.ReconnectAsync();
+                    logger.Warn("mqtt disconnected! trying to reconnect");
+                    await client.ReconnectAsync().ConfigureAwait(false);
+                }
+                catch (MQTTnet.Exceptions.MqttCommunicationException ex)
+                {
+                    logger.Error(ex);
+                    await Task.Delay(2000).ConfigureAwait(false);
                 }
             }
-            catch (MQTTnet.Exceptions.MqttCommunicationException ex)
-            {
-                logger.Error(ex);
-                //var appLocation = System.Reflection.Assembly.GetExecutingAssembly().Location;
-                //System.Diagnostics.Process.Start(appLocation);
-
-                // Closes the current process
-                Environment.Exit(ex.HResult);
-            }
+            reconnectSync.Release();
         }
 
         internal async Task SendMessage(string topic, byte[] message)
@@ -91,7 +93,7 @@ namespace MailParser
                             .WithTopic(topic)
                             .WithPayload(message)
                             .Build();
-            var res = await client.PublishAsync(mqttMsg);
+            var res = await this.client.PublishAsync(mqttMsg).ConfigureAwait(false);
             if(res.ReasonCode != MqttClientPublishReasonCode.Success)
             {
                 logger.Warn(res.ReasonCode.ToString() + " " + res.ReasonString);
@@ -110,7 +112,7 @@ namespace MailParser
                 .WithTopicFilter(topicFilter)
                 .Build();
 
-            var res = await client.SubscribeAsync(topicSub);
+            var res = await this.client.SubscribeAsync(topicSub).ConfigureAwait(false);
             client.UseApplicationMessageReceivedHandler(e =>
             {
                 if (e.ApplicationMessage.Topic == topic)
@@ -129,7 +131,7 @@ namespace MailParser
 
         internal async Task SendOK()
         {
-            var res = await client.PublishAsync(willMsgok);
+            var res = await this.client.PublishAsync(willMsgok).ConfigureAwait(false);
             if(res.ReasonCode != MqttClientPublishReasonCode.Success)
             {
                 logger.Warn(res.ReasonCode.ToString() + " " + res.ReasonString);

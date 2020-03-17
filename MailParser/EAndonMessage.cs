@@ -3,6 +3,7 @@ using System.Text;
 using Newtonsoft.Json;
 using NLog;
 using System.Threading.Tasks;
+using System.Globalization;
 
 namespace MailParser
 {
@@ -49,7 +50,7 @@ namespace MailParser
         {
             this.AcknowledgeBy = user;
             this.AcknowledgeTime = timestamp;
-            this.IsActive = true;
+            this.IsActive = string.IsNullOrEmpty(this.ResolvedTime.Trim());
             this.SlaLevel = sla;
         }
 
@@ -71,14 +72,16 @@ namespace MailParser
 
         internal void CheckSla()
         {
-            if (this.InitiateTime != "")
+            if (string.IsNullOrEmpty(this.InitiateTime))
             {
-                var initiatedTime = DateTime.Parse(this.InitiateTime);
-                var calcSla = Math.Min(((int)(DateTime.Now - initiatedTime).TotalMinutes) / 30, 2);
-                if (calcSla > this.SlaLevel)
-                {
-                    this.SlaLevel = calcSla;
-                }
+                return;
+            }
+
+            var initiatedTime = DateTime.Parse(this.InitiateTime, CultureInfo.InvariantCulture);
+            var calcSla = Math.Min(((int)(DateTime.Now - initiatedTime).TotalMinutes) / 30, 2);
+            if (calcSla > this.SlaLevel)
+            {
+                this.SlaLevel = calcSla;
             }
         }
 
@@ -90,13 +93,13 @@ namespace MailParser
 
         internal async Task SendMqttMessage(MqttManager mqttManager)
         {
-            await mqttManager.SendMessage(this.GetMqttTopic(), this.ToBytes());
+            await mqttManager.SendMessage(this.GetMqttTopic(), this.ToBytes()).ConfigureAwait(false);
         }
 
         internal async Task ForceRemove(MqttManager mqttManager)
         {
             this.IsActive = false;
-            await mqttManager.SendMessage(this.GetMqttTopic(), this.ToBytes());
+            await mqttManager.SendMessage(this.GetMqttTopic(), this.ToBytes()).ConfigureAwait(false);
         }
 
         private string GetMqttTopic()

@@ -3,10 +3,8 @@ using System.Linq;
 using System.Collections.Generic;
 using NLog;
 using System.Threading.Tasks;
-using System.Runtime.Serialization.Formatters.Binary;
 using System.IO;
 using Newtonsoft.Json;
-using System.Text;
 
 namespace MailParser
 {
@@ -80,7 +78,7 @@ namespace MailParser
             {
                 activeEandon[msg.AlertId] = msg;
             }
-            await msg.SendMqttMessage(mqttManager);
+            await msg.SendMqttMessage(mqttManager).ConfigureAwait(false);
         }
 
         private void RemoveInactive()
@@ -113,7 +111,7 @@ namespace MailParser
             foreach (var item in activeVals)
             {
                 item.CheckSla();
-                await item.SendMqttMessage(mqttManager);
+                await item.SendMqttMessage(mqttManager).ConfigureAwait(false);
             }
         }
 
@@ -133,7 +131,7 @@ namespace MailParser
 
             foreach (var keyValuePair in eAndonMessages)
             {
-                await keyValuePair.Value.ForceRemove(mqttManager);
+                await keyValuePair.Value.ForceRemove(mqttManager).ConfigureAwait(false);
             }
 
             if (eAndonMessages.Any())
@@ -155,7 +153,7 @@ namespace MailParser
                 oldMsg.Acknowledge(eAndon.InitiatedBy, eAndon.InitiateTime, eAndon.SlaLevel);
                 activeEandon[eAndon.AlertId] = oldMsg;
             }
-            await oldMsg.SendMqttMessage(mqttManager);
+            await oldMsg.SendMqttMessage(mqttManager).ConfigureAwait(false);
             Console.WriteLine($"{oldMsg.AlertId} : {oldMsg.AcknowledgeBy} has raised been acknowledged");
         }
 
@@ -173,7 +171,7 @@ namespace MailParser
                 activeEandon[eAndon.AlertId] = oldMsg;
             }
 
-            await oldMsg.SendMqttMessage(mqttManager);
+            await oldMsg.SendMqttMessage(mqttManager).ConfigureAwait(false);
             Console.WriteLine($"{oldMsg.AlertId} : {oldMsg.AcknowledgeBy} has been resolved");
         }
 
@@ -182,15 +180,15 @@ namespace MailParser
             switch (status)
             {
                 case EandonStatus.Initiated:
-                    await this.Initiate(msg);
+                    await this.Initiate(msg).ConfigureAwait(false);
                     this.dirty = true;
                     break;
                 case EandonStatus.Acknowledge:
-                    await this.Acknowledge(msg);
+                    await this.Acknowledge(msg).ConfigureAwait(false);
                     this.dirty = true;
                     break;
                 case EandonStatus.Resolved:
-                    await this.Resolve(msg);
+                    await this.Resolve(msg).ConfigureAwait(false);
                     this.dirty = true;
                     break;
             }

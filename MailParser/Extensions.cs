@@ -14,10 +14,10 @@ namespace MailParser
 
         public static string GetTimeStamp(this string timeStamp)
         {
-            var timestampIndex = timeStamp.IndexOf("AM");
+            var timestampIndex = timeStamp.IndexOf("AM", System.StringComparison.InvariantCulture);
             if (timestampIndex == -1)
             {
-                timestampIndex = timeStamp.IndexOf("PM");
+                timestampIndex = timeStamp.IndexOf("PM", System.StringComparison.InvariantCulture);
             }
             return timeStamp.Substring(0, timestampIndex + 2);
         }
